@@ -1,0 +1,189 @@
+[
+  {
+    "unit_id": "L-1113",
+    "bedrooms": 1,
+    "view": "Garden",
+    "platform": "Special Places",
+    "url": "https://www.specialplacesofcostarica.com/vacation-rental/pacifico-l1113/",
+    "notes": "1BR garden view — confirm specific URL if 404"
+  },
+  {
+    "unit_id": "L-211",
+    "bedrooms": 2,
+    "view": null,
+    "platform": "Special Places",
+    "url": "https://www.specialplacesofcostarica.com/vacation-rental/pacifico-l211/"
+  },
+  {
+    "unit_id": "L802",
+    "bedrooms": 2,
+    "view": "Pool",
+    "platform": "Airbnb",
+    "listing_id": "1271942562086942388",
+    "url": "https://www.airbnb.com/rooms/1271942562086942388"
+  },
+  {
+    "unit_id": "L1302",
+    "bedrooms": null,
+    "view": "Pool",
+    "platform": "Airbnb",
+    "listing_id": null,
+    "url": null,
+    "notes": "No specific listing ID — URL was a generic search page"
+  },
+  {
+    "unit_id": "L1306",
+    "bedrooms": 3,
+    "view": "Corner",
+    "platform": "Airbnb",
+    "listing_id": "1116057603085262759",
+    "url": "https://www.airbnb.com/rooms/1116057603085262759"
+  },
+  {
+    "unit_id": "L518",
+    "bedrooms": 3,
+    "view": "Corner",
+    "platform": "Airbnb",
+    "listing_id": "669478628614787203",
+    "url": "https://www.airbnb.com/rooms/669478628614787203"
+  },
+  {
+    "unit_id": "L-306",
+    "bedrooms": 3,
+    "view": "Mountain",
+    "platform": "Special Places",
+    "url": "https://www.specialplacesofcostarica.com/vacation-rental/pacifico-l-306/"
+  },
+  {
+    "unit_id": "L-218",
+    "bedrooms": 3,
+    "view": "Mountain",
+    "platform": "Special Places",
+    "url": "https://www.specialplacesofcostarica.com/vacation-rental/pacifico-l-218/"
+  },
+  {
+    "unit_id": "L-401",
+    "bedrooms": 3,
+    "view": "Mountain",
+    "platform": "Special Places",
+    "url": "https://www.specialplacesofcostarica.com/vacation-rental/pacifico-l-401/"
+  },
+  {
+    "unit_id": "L1009",
+    "bedrooms": null,
+    "view": null,
+    "platform": "Booking.com",
+    "listing_id": null,
+    "url": null,
+    "notes": "No specific listing URL — confirm unit # and re-add"
+  },
+  {
+    "unit_id": "L505",
+    "bedrooms": 2,
+    "view": null,
+    "platform": "Brokers CR",
+    "listing_id": "157612",
+    "url": "https://bookcostarica-brokers.escapia.com/Unit/Details/157612",
+    "ical_url": "https://bookcostarica-brokers.escapia.com/Unit/iCal/157612"
+  },
+  {
+    "unit_id": "L1110",
+    "bedrooms": 3,
+    "view": null,
+    "platform": "Brokers CR",
+    "listing_id": "114729",
+    "url": "https://bookcostarica-brokers.escapia.com/Unit/Details/114729",
+    "ical_url": "https://bookcostarica-brokers.escapia.com/Unit/iCal/114729"
+  },
+  {
+    "unit_id": "C-305",
+    "bedrooms": 3,
+    "view": "Ocean",
+    "platform": "Special Places",
+    "url": "https://www.specialplacesofcostarica.com/vacation-rental/pacifico-c-305/",
+    "rented_by_you": true
+  },
+  {
+    "unit_id": "C-306",
+    "bedrooms": 2,
+    "view": "Ocean",
+    "platform": "Special Places",
+    "url": "https://www.specialplacesofcostarica.com/vacation-rental/pacifico-c-306/",
+    "rented_by_you": true
+  },
+  {
+    "unit_id": "C-308",
+    "bedrooms": 3,
+    "view": "Ocean",
+    "platform": "Special Places",
+    "url": "https://www.specialplacesofcostarica.com/vacation-rental/pacifico-c-308/"
+  },
+  {
+    "unit_id": "C-309",
+    "bedrooms": 3,
+    "view": "Ocean",
+    "platform": "Krain (SOLD)",
+    "url": null,
+    "notes": "SOLD 2021, comp/reference only — skip"
+  },
+  {
+    "unit_id": "C-404",
+    "bedrooms": 3,
+    "view": "Ocean",
+    "platform": "Special Places",
+    "url": "https://www.specialplacesofcostarica.com/vacation-rental/pacifico-c-404/"
+  },
+  {
+    "unit_id": "C-407",
+    "bedrooms": 2,
+    "view": "Ocean",
+    "platform": "Brokers CR",
+    "listing_id": "253974",
+    "url": "https://bookpexscr.escapia.com/Unit/Details/253974",
+    "ical_url": "https://bookpexscr.escapia.com/Unit/iCal/253974",
+    "rented_by_you": true
+  },
+  {
+    "unit_id": "C-410",
+    "bedrooms": 3,
+    "view": "Ocean",
+    "platform": "Special Places",
+    "url": "https://www.specialplacesofcostarica.com/vacation-rental/pacifico-c410/"
+  },
+  {
+    "unit_id": "VRBO-4429252",
+    "bedrooms": 1,
+    "view": null,
+    "platform": "VRBO",
+    "listing_id": "4429252",
+    "url": "https://www.vrbo.com/4429252",
+    "ical_url": "https://www.vrbo.com/4429252/ical.ics"
+  },
+  {
+    "unit_id": "VRBO-363286",
+    "bedrooms": 2,
+    "view": "Ocean",
+    "platform": "VRBO",
+    "listing_id": "363286",
+    "url": "https://www.vrbo.com/363286",
+    "ical_url": "https://www.vrbo.com/363286/ical.ics"
+  },
+  {
+    "unit_id": "VRBO-4610582",
+    "bedrooms": 2,
+    "view": null,
+    "platform": "VRBO",
+    "listing_id": "4610582ha",
+    "url": "https://www.vrbo.com/4610582ha",
+    "ical_url": "https://www.vrbo.com/4610582ha/ical.ics"
+  },
+  {
+    "unit_id": "1BR Quiet Pool",
+    "bedrooms": 1,
+    "view": "Pool",
+    "platform": "Airbnb",
+    "listing_id": null,
+    "url": null,
+    "notes": "No specific listing ID — generic search URL. Get unit # from Airbnb."
+  }
+]
