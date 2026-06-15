@@ -234,8 +234,8 @@ def _parse_date_array(json_str: str, label: str) -> set[date] | None:
 # Per-unit dispatcher
 # ---------------------------------------------------------------------------
 
-def check_unit(unit: dict, window: int) -> int | None:
-    """Fetch availability, print per-unit line + month breakdown, return window count."""
+def check_unit(unit: dict, window: int) -> set[date] | None:
+    """Fetch availability, print per-unit line + month breakdown, return blocked date set."""
     platform = unit.get("platform", "")
     unit_id  = unit["unit_id"]
 
@@ -287,18 +287,18 @@ def check_unit(unit: dict, window: int) -> int | None:
         print(f"  {unit_id}: SKIP (unknown platform: {platform})")
         return None
 
-    # --- report ---
+    # --- inline output ---
     if blocked is None:
         print(f"  {unit_id}: could not retrieve data")
         return None
 
-    total = _count_in_window(blocked, window)
-    pct   = total / window * 100
-    by_mo = _by_month(blocked, window)
+    total  = _count_in_window(blocked, window)
+    pct    = total / window * 100
+    by_mo  = _by_month(blocked, window)
     mo_str = "  |  ".join(f"{mo}: {n}n" for mo, n in sorted(by_mo.items()))
     print(f"  {unit_id}: {total}/{window} nights blocked ({pct:.0f}%)  [{mo_str}]")
 
-    return total
+    return blocked
 
 
 # ---------------------------------------------------------------------------
@@ -380,58 +380,70 @@ def update_xlsx(xlsx_path: Path, results: dict[str, int | None], window: int) ->
 # Screen report (Android / no-xlsx mode)
 # ---------------------------------------------------------------------------
 
-def print_report(results: dict[str, int | None], units_meta: dict[str, dict], window: int) -> None:
-    today = date.today()
+def print_report(blocked_sets: dict[str, set[date] | None], units_meta: dict[str, dict], window: int) -> None:
+    today      = date.today()
     window_end = today + timedelta(days=window)
 
-    print()
-    print("=" * 40)
-    print(f"  PACIFICO OCCUPANCY REPORT")
-    print(f"  {today}  |  next {window} nights")
-    print(f"  window: {today} → {window_end}")
-    print("=" * 40)
+    have_data = {uid: s for uid, s in blocked_sets.items() if s is not None}
+    skipped   = [uid for uid, s in blocked_sets.items() if s is None]
 
-    have_data = [(uid, v) for uid, v in results.items() if v is not None]
-    skipped   = [uid for uid, v in results.items() if v is None]
+    print()
+    print("=" * 42)
+    print("  PACIFICO OCCUPANCY REPORT")
+    print(f"  {today}  →  {window_end}  ({window} nights)")
+    print("=" * 42)
 
     if not have_data:
         print("\n  No data retrieved — check connectivity.")
         return
 
-    # Group by bedroom count
+    # Collect all month labels in window order
+    month_labels = []
+    seen = set()
+    for d in _window_dates(window):
+        mo = d.strftime("%b")
+        if mo not in seen:
+            seen.add(mo)
+            month_labels.append((d.strftime("%Y-%b"), mo))
+
+    # Group units by bedroom count
     by_beds: dict = {}
-    for uid, blocked in have_data:
+    for uid, blocked in have_data.items():
         beds = units_meta[uid].get("bedrooms") or "?"
-        by_beds.setdefault(beds, []).append((uid, blocked))
+        by_beds.setdefault(beds, []).append(uid)
 
     for beds in sorted(by_beds, key=lambda x: (x == "?", x)):
         label = f"{beds}BR" if beds != "?" else "Unknown BR"
-        print(f"\n  ── {label} ──────────────────────")
-        for uid, blocked in sorted(by_beds[beds]):
-            pct   = blocked / window * 100
-            bar   = "█" * int(pct / 5) + "░" * (20 - int(pct / 5))
-            rented = " ★" if units_meta[uid].get("rented_by_you") else ""
-            print(f"  {uid:<14}{rented}")
-            print(f"    {bar} {blocked}/{window}n  {pct:.0f}%")
+        print(f"\n  ── {label} " + "─" * (28 - len(label)))
+        for uid in sorted(by_beds[beds]):
+            blocked = have_data[uid]
+            total   = _count_in_window(blocked, window)
+            pct     = total / window * 100
+            bar     = "█" * int(pct / 5) + "░" * (20 - int(pct / 5))
+            star    = " ★" if units_meta[uid].get("rented_by_you") else ""
+            by_mo   = _by_month(blocked, window)
 
-    # Month breakdown across all units with data
-    print(f"\n  ── By Month ─────────────────────")
-    month_totals: dict[str, list[int]] = defaultdict(list)
-    # Re-derive month breakdown from window counts per unit isn't possible without
-    # the blocked sets here, so print a note instead
-    print(f"  (per-unit month detail shown during fetch above)")
+            print(f"\n  {uid}{star}")
+            print(f"  {bar} {total}/{window}n ({pct:.0f}%)")
+            # Month breakdown
+            mo_parts = []
+            for full_mo, short_mo in month_labels:
+                n = by_mo.get(full_mo, 0)
+                days_in_window = sum(1 for d in _window_dates(window) if d.strftime("%Y-%b") == full_mo)
+                mo_parts.append(f"{short_mo}: {n}/{days_in_window}n")
+            print("  " + "  |  ".join(mo_parts))
 
     # Overall stats
-    vals = [v for _, v in have_data]
-    avg  = sum(vals) / len(vals)
-    print(f"\n  ── Overall ──────────────────────")
-    print(f"  Units with data : {len(have_data)}")
-    print(f"  Avg blocked     : {avg:.1f}/{window} nights  ({avg/window*100:.0f}%)")
-    print(f"  Highest         : {max(vals)}/30n  ({max(vals)/window*100:.0f}%)")
-    print(f"  Lowest          : {min(vals)}/30n  ({min(vals)/window*100:.0f}%)")
+    all_totals = [_count_in_window(s, window) for s in have_data.values()]
+    avg = sum(all_totals) / len(all_totals)
+    print(f"\n  ── Overall " + "─" * 30)
+    print(f"  Units tracked : {len(have_data)}")
+    print(f"  Avg blocked   : {avg:.1f}/{window}n  ({avg/window*100:.0f}%)")
+    print(f"  Highest       : {max(all_totals)}/{window}n  ({max(all_totals)/window*100:.0f}%)")
+    print(f"  Lowest        : {min(all_totals)}/{window}n  ({min(all_totals)/window*100:.0f}%)")
     if skipped:
         print(f"\n  Skipped ({len(skipped)}): {', '.join(skipped)}")
-    print("=" * 40)
+    print("=" * 42)
 
 
 # ---------------------------------------------------------------------------
@@ -466,18 +478,21 @@ def main():
 
     print(f"Checking {len(units_data)} units — {args.window}-night window — {date.today()}\n")
 
-    # Collect full blocked-date sets so we can use them in both report and xlsx
-    blocked_sets: dict[str, set[date] | None] = {}
-    results: dict[str, int | None] = {}
     units_meta: dict[str, dict] = {u["unit_id"]: u for u in units_data}
+    blocked_sets: dict[str, set[date] | None] = {}
 
     for unit in units_data:
-        val = check_unit(unit, args.window)
-        results[unit["unit_id"]] = val
+        blocked_sets[unit["unit_id"]] = check_unit(unit, args.window)
         time.sleep(0.3)
 
+    # Window counts for xlsx (30-night total per unit)
+    results: dict[str, int | None] = {
+        uid: (_count_in_window(s, args.window) if s is not None else None)
+        for uid, s in blocked_sets.items()
+    }
+
     if args.report:
-        print_report(results, units_meta, args.window)
+        print_report(blocked_sets, units_meta, args.window)
     else:
         have_data = {uid: v for uid, v in results.items() if v is not None}
         print(f"\n--- Summary ({len(have_data)}/{len(results)} units retrieved) ---")
