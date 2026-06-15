@@ -233,6 +233,10 @@ def check_unit(unit: dict, window: int) -> int | None:
     platform = unit.get("platform", "")
     unit_id  = unit["unit_id"]
 
+    if unit.get("skip"):
+        print(f"  {unit_id}: SKIP")
+        return None
+
     if "SOLD" in platform or "Krain" in platform:
         print(f"  {unit_id}: SKIP (sold/inactive)")
         return None

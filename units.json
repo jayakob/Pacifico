@@ -20,7 +20,8 @@
     "view": "Pool",
     "platform": "Airbnb",
     "listing_id": "1271942562086942388",
-    "url": "https://www.airbnb.com/rooms/1271942562086942388"
+    "url": "https://www.airbnb.com/rooms/1271942562086942388",
+    "skip": true
   },
   {
     "unit_id": "L1302",
@@ -29,7 +30,8 @@
     "platform": "Airbnb",
     "listing_id": null,
     "url": null,
-    "notes": "No specific listing ID — URL was a generic search page"
+    "notes": "No specific listing ID — URL was a generic search page",
+    "skip": true
   },
   {
     "unit_id": "L1306",
@@ -37,7 +39,8 @@
     "view": "Corner",
     "platform": "Airbnb",
     "listing_id": "1116057603085262759",
-    "url": "https://www.airbnb.com/rooms/1116057603085262759"
+    "url": "https://www.airbnb.com/rooms/1116057603085262759",
+    "skip": true
   },
   {
     "unit_id": "L518",
@@ -45,7 +48,8 @@
     "view": "Corner",
     "platform": "Airbnb",
     "listing_id": "669478628614787203",
-    "url": "https://www.airbnb.com/rooms/669478628614787203"
+    "url": "https://www.airbnb.com/rooms/669478628614787203",
+    "skip": true
   },
   {
     "unit_id": "L-306",
@@ -184,6 +188,7 @@
     "platform": "Airbnb",
     "listing_id": null,
     "url": null,
-    "notes": "No specific listing ID — generic search URL. Get unit # from Airbnb."
+    "notes": "No specific listing ID — generic search URL. Get unit # from Airbnb.",
+    "skip": true
   }
 ]
