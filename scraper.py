@@ -377,6 +377,64 @@ def update_xlsx(xlsx_path: Path, results: dict[str, int | None], window: int) ->
 
 
 # ---------------------------------------------------------------------------
+# Screen report (Android / no-xlsx mode)
+# ---------------------------------------------------------------------------
+
+def print_report(results: dict[str, int | None], units_meta: dict[str, dict], window: int) -> None:
+    today = date.today()
+    window_end = today + timedelta(days=window)
+
+    print()
+    print("=" * 40)
+    print(f"  PACIFICO OCCUPANCY REPORT")
+    print(f"  {today}  |  next {window} nights")
+    print(f"  window: {today} → {window_end}")
+    print("=" * 40)
+
+    have_data = [(uid, v) for uid, v in results.items() if v is not None]
+    skipped   = [uid for uid, v in results.items() if v is None]
+
+    if not have_data:
+        print("\n  No data retrieved — check connectivity.")
+        return
+
+    # Group by bedroom count
+    by_beds: dict = {}
+    for uid, blocked in have_data:
+        beds = units_meta[uid].get("bedrooms") or "?"
+        by_beds.setdefault(beds, []).append((uid, blocked))
+
+    for beds in sorted(by_beds, key=lambda x: (x == "?", x)):
+        label = f"{beds}BR" if beds != "?" else "Unknown BR"
+        print(f"\n  ── {label} ──────────────────────")
+        for uid, blocked in sorted(by_beds[beds]):
+            pct   = blocked / window * 100
+            bar   = "█" * int(pct / 5) + "░" * (20 - int(pct / 5))
+            rented = " ★" if units_meta[uid].get("rented_by_you") else ""
+            print(f"  {uid:<14}{rented}")
+            print(f"    {bar} {blocked}/{window}n  {pct:.0f}%")
+
+    # Month breakdown across all units with data
+    print(f"\n  ── By Month ─────────────────────")
+    month_totals: dict[str, list[int]] = defaultdict(list)
+    # Re-derive month breakdown from window counts per unit isn't possible without
+    # the blocked sets here, so print a note instead
+    print(f"  (per-unit month detail shown during fetch above)")
+
+    # Overall stats
+    vals = [v for _, v in have_data]
+    avg  = sum(vals) / len(vals)
+    print(f"\n  ── Overall ──────────────────────")
+    print(f"  Units with data : {len(have_data)}")
+    print(f"  Avg blocked     : {avg:.1f}/{window} nights  ({avg/window*100:.0f}%)")
+    print(f"  Highest         : {max(vals)}/30n  ({max(vals)/window*100:.0f}%)")
+    print(f"  Lowest          : {min(vals)}/30n  ({min(vals)/window*100:.0f}%)")
+    if skipped:
+        print(f"\n  Skipped ({len(skipped)}): {', '.join(skipped)}")
+    print("=" * 40)
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -390,6 +448,8 @@ def main():
                         help="Only check this unit ID (e.g. C-305)")
     parser.add_argument("--check", action="store_true",
                         help="Test network connectivity to each platform and exit")
+    parser.add_argument("--report", action="store_true",
+                        help="Print a clean screen report (great for phone/tablet — no xlsx needed)")
     args = parser.parse_args()
 
     if args.check:
@@ -397,25 +457,33 @@ def main():
         run_check()
         return
 
-    units = json.loads(UNITS_FILE.read_text())
+    units_data = json.loads(UNITS_FILE.read_text())
     if args.unit:
-        units = [u for u in units if u["unit_id"] == args.unit]
-        if not units:
+        units_data = [u for u in units_data if u["unit_id"] == args.unit]
+        if not units_data:
             print(f"Unit '{args.unit}' not found in units.json")
             sys.exit(1)
 
-    print(f"Checking {len(units)} units — {args.window}-night window — {date.today()}\n")
+    print(f"Checking {len(units_data)} units — {args.window}-night window — {date.today()}\n")
 
+    # Collect full blocked-date sets so we can use them in both report and xlsx
+    blocked_sets: dict[str, set[date] | None] = {}
     results: dict[str, int | None] = {}
-    for unit in units:
-        results[unit["unit_id"]] = check_unit(unit, args.window)
+    units_meta: dict[str, dict] = {u["unit_id"]: u for u in units_data}
+
+    for unit in units_data:
+        val = check_unit(unit, args.window)
+        results[unit["unit_id"]] = val
         time.sleep(0.3)
 
-    have_data = {uid: v for uid, v in results.items() if v is not None}
-    print(f"\n--- Summary ({len(have_data)}/{len(results)} units retrieved) ---")
-    for uid, val in results.items():
-        status = f"{val} nights blocked" if val is not None else "no data / skipped"
-        print(f"  {uid}: {status}")
+    if args.report:
+        print_report(results, units_meta, args.window)
+    else:
+        have_data = {uid: v for uid, v in results.items() if v is not None}
+        print(f"\n--- Summary ({len(have_data)}/{len(results)} units retrieved) ---")
+        for uid, val in results.items():
+            status = f"{val} nights blocked" if val is not None else "no data / skipped"
+            print(f"  {uid}: {status}")
 
     if args.update:
         xlsx_path = Path(args.update)
@@ -423,7 +491,7 @@ def main():
             print(f"\nFile not found: {xlsx_path}")
             sys.exit(1)
         update_xlsx(xlsx_path, results, args.window)
-    else:
+    elif not args.report:
         print("\nRun with --update path/to/tracker.xlsx to write results into the spreadsheet.")
 
 
