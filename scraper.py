@@ -15,10 +15,10 @@ Run this from your local machine (residential IP). Cloud/datacenter IPs
 are blocked by Airbnb, VRBO, and most vacation rental platforms.
 
 Platform support:
-    Airbnb        — JSON calendar API (listing_id required; some block bots)
     VRBO          — public iCal feed
     Escapia       — public iCal feed (Brokers CR, PEXS)
     Special Places — scrapes embedded calendar JSON from listing page
+    Airbnb        — skipped (set skip:true in units.json)
     Booking.com   — not supported; manual check required
 """
 
@@ -27,6 +27,7 @@ import json
 import re
 import sys
 import time
+from collections import defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -57,27 +58,38 @@ def _date_range(start: date, n: int):
         yield start + timedelta(days=i)
 
 
-def _count_in_window(blocked_dates: set[date], window: int) -> int:
+def _window_dates(window: int) -> list[date]:
     today = date.today()
-    return sum(1 for d in _date_range(today, window) if d in blocked_dates)
+    return list(_date_range(today, window))
+
+
+def _count_in_window(blocked: set[date], window: int) -> int:
+    return sum(1 for d in _window_dates(window) if d in blocked)
+
+
+def _by_month(blocked: set[date], window: int) -> dict[str, int]:
+    """Return {YYYY-Mon: count} for each calendar month touched by the window."""
+    counts: dict[str, int] = defaultdict(int)
+    for d in _window_dates(window):
+        if d in blocked:
+            counts[d.strftime("%Y-%b")] += 1
+    return dict(counts)
 
 
 # ---------------------------------------------------------------------------
-# Platform scrapers
+# Platform scrapers — all return set[date] | None
 # ---------------------------------------------------------------------------
 
-def fetch_airbnb(listing_id: str, window: int) -> int | None:
-    """Count blocked nights via Airbnb's internal calendar JSON API."""
+def fetch_airbnb(listing_id: str) -> set[date] | None:
+    """Fetch blocked dates via Airbnb's internal calendar JSON API."""
     today = date.today()
-    # Airbnb also accepts these headers for the JSON API
     headers = {
         "X-Airbnb-API-Key": "d306zoyjsyarp7uqwhtun1d19",
         "Accept": "application/json",
     }
     blocked: set[date] = set()
+    months_seen: set[tuple] = set()
 
-    # Fetch 2 calendar months to cover any 30-day span crossing a month boundary
-    months_seen = set()
     for offset in range(2):
         target = today + timedelta(days=offset * 28)
         key = (target.year, target.month)
@@ -96,8 +108,8 @@ def fetch_airbnb(listing_id: str, window: int) -> int | None:
             data = r.json()
         except requests.HTTPError as e:
             if e.response is not None and e.response.status_code == 403:
-                print(f"    [airbnb] 403 — Airbnb is blocking this IP. "
-                      "Run from a residential network, or add the iCal URL to units.json.")
+                print(f"    [airbnb] 403 — blocked. Run from a residential network "
+                      "or add an iCal URL to units.json.")
             else:
                 print(f"    [airbnb] HTTP error for {listing_id}: {e}")
             return None
@@ -114,11 +126,11 @@ def fetch_airbnb(listing_id: str, window: int) -> int | None:
                         pass
         time.sleep(0.5)
 
-    return _count_in_window(blocked, window)
+    return blocked
 
 
-def fetch_ical(ical_url: str, window: int, label: str = "ical") -> int | None:
-    """Count blocked nights from any iCal (.ics) feed."""
+def fetch_ical(ical_url: str, label: str = "ical") -> set[date] | None:
+    """Fetch blocked dates from any iCal (.ics) feed."""
     try:
         r = SESSION.get(ical_url, timeout=20)
         r.raise_for_status()
@@ -134,7 +146,6 @@ def fetch_ical(ical_url: str, window: int, label: str = "ical") -> int | None:
     today = date.today()
 
     for event_block in re.split(r"BEGIN:VEVENT", r.text)[1:]:
-        # Match DTSTART with or without VALUE=DATE qualifier
         dtstart = re.search(r"DTSTART(?:;[^:]+)?:(\d{8})", event_block)
         dtend   = re.search(r"DTEND(?:;[^:]+)?:(\d{8})", event_block)
         if not dtstart or not dtend:
@@ -144,21 +155,17 @@ def fetch_ical(ical_url: str, window: int, label: str = "ical") -> int | None:
             end   = date(int(dtend[1][:4]),   int(dtend[1][4:6]),   int(dtend[1][6:]))
         except ValueError:
             continue
-        # iCal DTEND is exclusive — each day from start up to (not including) end is blocked
         current = start
         while current < end:
-            if current >= today:  # only care about future dates
+            if current >= today:
                 blocked.add(current)
             current += timedelta(days=1)
 
-    return _count_in_window(blocked, window)
+    return blocked
 
 
-def fetch_special_places(url: str, window: int) -> int | None:
-    """
-    Count blocked nights from a Special Places of Costa Rica listing page.
-    Tries several embedded-JSON patterns used by their WP/Lodgix stack.
-    """
+def fetch_special_places(url: str) -> set[date] | None:
+    """Fetch blocked dates from a Special Places of Costa Rica listing page."""
     try:
         r = SESSION.get(url, timeout=20)
         r.raise_for_status()
@@ -175,19 +182,19 @@ def fetch_special_places(url: str, window: int) -> int | None:
     # Pattern 1: JSON key "unavailable_dates" array
     m = re.search(r'"unavailable_dates"\s*:\s*(\["[^"]*"(?:\s*,\s*"[^"]*")*\])', html)
     if m:
-        return _parse_date_array(m.group(1), window, "unavailable_dates")
+        return _parse_date_array(m.group(1), "unavailable_dates")
 
     # Pattern 2: inline iCal link
     ical_match = re.search(r'href="([^"]+\.ics[^"]*)"', html)
     if ical_match:
-        return fetch_ical(ical_match.group(1), window, "special_places_ical")
+        return fetch_ical(ical_match.group(1), "special_places_ical")
 
-    # Pattern 3: JS variable blocked_dates = [...]
+    # Pattern 3: JS variable blocked_dates / booked_dates = [...]
     m = re.search(r'(?:blocked_dates|booked_dates)\s*[=:]\s*(\[[^\]]*\])', html)
     if m:
-        return _parse_date_array(m.group(1), window, "blocked_dates")
+        return _parse_date_array(m.group(1), "blocked_dates")
 
-    # Pattern 4: Lodgix flatpickr disable array (dates in "from"/"to" objects)
+    # Pattern 4: Lodgix flatpickr disable array
     m = re.search(r'"disable"\s*:\s*(\[.*?\])', html, re.DOTALL)
     if m:
         try:
@@ -198,14 +205,14 @@ def fetch_special_places(url: str, window: int) -> int | None:
                 if isinstance(entry, str):
                     blocked.add(date.fromisoformat(entry[:10]))
                 elif isinstance(entry, dict):
-                    from_d = date.fromisoformat(entry.get("from", "")[:10]) if entry.get("from") else None
-                    to_d   = date.fromisoformat(entry.get("to",   "")[:10]) if entry.get("to")   else None
+                    from_d = date.fromisoformat(entry["from"][:10]) if entry.get("from") else None
+                    to_d   = date.fromisoformat(entry["to"][:10])   if entry.get("to")   else None
                     if from_d and to_d:
                         current = from_d
                         while current <= to_d:
                             blocked.add(current)
                             current += timedelta(days=1)
-            return _count_in_window(blocked, window)
+            return blocked
         except Exception:
             pass
 
@@ -214,12 +221,10 @@ def fetch_special_places(url: str, window: int) -> int | None:
     return None
 
 
-def _parse_date_array(json_str: str, window: int, label: str) -> int | None:
+def _parse_date_array(json_str: str, label: str) -> set[date] | None:
     try:
         dates = json.loads(json_str)
-        today = date.today()
-        blocked = {date.fromisoformat(ds[:10]) for ds in dates if isinstance(ds, str)}
-        return _count_in_window(blocked, window)
+        return {date.fromisoformat(ds[:10]) for ds in dates if isinstance(ds, str)}
     except Exception as e:
         print(f"    [{label}] JSON parse error: {e}")
         return None
@@ -230,6 +235,7 @@ def _parse_date_array(json_str: str, window: int, label: str) -> int | None:
 # ---------------------------------------------------------------------------
 
 def check_unit(unit: dict, window: int) -> int | None:
+    """Fetch availability, print per-unit line + month breakdown, return window count."""
     platform = unit.get("platform", "")
     unit_id  = unit["unit_id"]
 
@@ -241,63 +247,66 @@ def check_unit(unit: dict, window: int) -> int | None:
         print(f"  {unit_id}: SKIP (sold/inactive)")
         return None
 
+    # --- fetch ---
+    blocked: set[date] | None = None
+
     if platform == "Airbnb":
         lid = unit.get("listing_id")
         if not lid:
             print(f"  {unit_id}: SKIP (no Airbnb listing ID — update units.json)")
             return None
-        # Prefer iCal if the user has added one (more reliable)
-        if unit.get("ical_url"):
-            blocked = fetch_ical(unit["ical_url"], window, "airbnb_ical")
-        else:
-            blocked = fetch_airbnb(lid, window)
+        blocked = fetch_ical(unit["ical_url"], "airbnb_ical") if unit.get("ical_url") \
+                  else fetch_airbnb(lid)
 
     elif platform == "VRBO":
         ical_url = unit.get("ical_url")
         if not ical_url:
             print(f"  {unit_id}: SKIP (no iCal URL)")
             return None
-        blocked = fetch_ical(ical_url, window, "vrbo")
+        blocked = fetch_ical(ical_url, "vrbo")
 
     elif platform in ("Brokers CR", "PEXS"):
         ical_url = unit.get("ical_url")
         if not ical_url:
             print(f"  {unit_id}: SKIP (no iCal URL)")
             return None
-        blocked = fetch_ical(ical_url, window, "escapia")
+        blocked = fetch_ical(ical_url, "escapia")
 
     elif platform == "Special Places":
         url = unit.get("url")
         if not url:
             print(f"  {unit_id}: SKIP (no URL)")
             return None
-        blocked = fetch_special_places(url, window)
+        blocked = fetch_special_places(url)
 
     elif platform == "Booking.com":
         print(f"  {unit_id}: SKIP (Booking.com — not supported; check manually)")
         return None
 
     else:
-        print(f"  {unit_id}: SKIP (no URL / unknown platform: {platform})")
+        print(f"  {unit_id}: SKIP (unknown platform: {platform})")
         return None
 
-    if blocked is not None:
-        pct = blocked / window * 100
-        print(f"  {unit_id}: {blocked}/{window} nights blocked ({pct:.0f}% occupied)")
-    else:
+    # --- report ---
+    if blocked is None:
         print(f"  {unit_id}: could not retrieve data")
+        return None
 
-    return blocked
+    total = _count_in_window(blocked, window)
+    pct   = total / window * 100
+    by_mo = _by_month(blocked, window)
+    mo_str = "  |  ".join(f"{mo}: {n}n" for mo, n in sorted(by_mo.items()))
+    print(f"  {unit_id}: {total}/{window} nights blocked ({pct:.0f}%)  [{mo_str}]")
+
+    return total
 
 
 # ---------------------------------------------------------------------------
-# Connectivity check mode
+# Connectivity check
 # ---------------------------------------------------------------------------
 
 def run_check():
-    """Quick connectivity test — one request per platform."""
     tests = [
-        ("Airbnb API",     "https://www.airbnb.com/api/v2/calendar_months?listing_id=1271942562086942388&month=6&year=2026&count=1&currency=USD"),
         ("VRBO iCal",      "https://www.vrbo.com/363286/ical.ics"),
         ("Escapia iCal",   "https://bookcostarica-brokers.escapia.com/Unit/iCal/157612"),
         ("Special Places", "https://www.specialplacesofcostarica.com/vacation-rental/pacifico-c-305/"),
@@ -324,15 +333,13 @@ def update_xlsx(xlsx_path: Path, results: dict[str, int | None], window: int) ->
     today_dt   = datetime.combine(date.today(), datetime.min.time())
     today_date = date.today()
 
-    # Row 4 = date headers; dates start at column G (7)
-    HEADER_ROW  = 4
+    HEADER_ROW     = 4
     FIRST_DATE_COL = 7
 
     date_col = None
     for col in range(FIRST_DATE_COL, ws.max_column + 2):
         val = ws.cell(row=HEADER_ROW, column=col).value
         if val is None:
-            # No date here yet — insert today
             date_col = col
             ws.cell(row=HEADER_ROW, column=col).value = today_dt
             ws.cell(row=HEADER_ROW, column=col).number_format = "YYYY-MM-DD"
@@ -346,7 +353,6 @@ def update_xlsx(xlsx_path: Path, results: dict[str, int | None], window: int) ->
         print("ERROR: could not find or create today's column in the Occupancy Log.")
         return
 
-    # Read cached unit IDs (data_only=True gives formula results from last save)
     wb_ro = openpyxl.load_workbook(xlsx_path, data_only=True)
     ws_ro = wb_ro["Occupancy Log"]
     unit_rows: dict[str, int] = {}
@@ -408,7 +414,7 @@ def main():
     have_data = {uid: v for uid, v in results.items() if v is not None}
     print(f"\n--- Summary ({len(have_data)}/{len(results)} units retrieved) ---")
     for uid, val in results.items():
-        status = f"{val} nights blocked" if val is not None else "no data"
+        status = f"{val} nights blocked" if val is not None else "no data / skipped"
         print(f"  {uid}: {status}")
 
     if args.update:
